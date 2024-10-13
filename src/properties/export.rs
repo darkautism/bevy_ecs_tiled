@@ -4,7 +4,6 @@ use std::collections::hash_map::Entry;
 use crate::properties::import::{
     Class, Enum, FieldType, Member, StorageType, TypeData, TypeImport, UseAs,
 };
-use bevy::ecs::reflect::ReflectBundle;
 use bevy::reflect::{
     ArrayInfo, EnumInfo, GetTypeRegistration, NamedField, Reflect, StructInfo, TupleInfo, TupleStructInfo,
     TypeInfo, TypeRegistration, TypeRegistry, UnitVariantInfo, UnnamedField, VariantInfo
@@ -152,6 +151,7 @@ pub struct TypeImportRegistry {
     id: u32,
 }
 
+#[allow(dead_code)]
 fn dependencies(t: &TypeRegistration) -> Vec<&'static str> {
     match t.type_info() {
         TypeInfo::Struct(info) => info.iter().map(NamedField::type_path).collect(),
@@ -163,9 +163,9 @@ fn dependencies(t: &TypeRegistration) -> Vec<&'static str> {
         TypeInfo::Enum(info) => info.iter().flat_map(|s| match s {
             VariantInfo::Struct(s) => s.iter().map(NamedField::type_path).collect(),
             VariantInfo::Tuple(s) => s.iter().map(UnnamedField::type_path).collect(),
-            VariantInfo::Unit(s) => vec![],
+            VariantInfo::Unit(_) => vec![],
         }).collect(),
-        TypeInfo::Value(info) => vec![],
+        TypeInfo::Value(_) => vec![],
     }
 }
 
@@ -180,19 +180,17 @@ impl TypeImportRegistry {
         out
     }
     
-    pub fn from_registry_2(registry: &TypeRegistry) -> Self {
-        let mut out = Self::default();
-        let mut to_register: Vec<&TypeRegistration> = registry.iter()
-            .filter(|r| r.data::<ReflectComponent>().is_some() || r.data::<ReflectBundle>().is_some() || r.data::<ReflectResource>().is_some())
-            .collect();
-        
-        
-        
-        out
+    pub fn from_registry_2(_registry: &TypeRegistry) -> Self {
+        // let out = Self::default();
+        // let to_register: Vec<&TypeRegistration> = registry.iter()
+        //     .filter(|r| r.data::<ReflectComponent>().is_some() || r.data::<ReflectBundle>().is_some() || r.data::<ReflectResource>().is_some())
+        //     .collect();
+        Self::default()
     }
-    
+
+    #[allow(clippy::result_unit_err)]
     pub fn try_register_recursive(&mut self, registry: &TypeRegistry, t: &TypeRegistration) -> Result<HashMap<&'static str, TypeImport>, ()> {
-        let t_import = self.generate_import(t, registry).map_err(|_| ())?;
+        let _t_import = self.generate_import(t, registry).map_err(|_| ())?;
         
         // let mut out = HashMap::from()
     
@@ -244,7 +242,7 @@ impl TypeImportRegistry {
     }
 
     pub fn to_vec(self) -> Vec<TypeImport> {
-        let mut out = self.types.into_values().flat_map(|x| x).collect::<Vec<_>>();
+        let mut out = self.types.into_values().flatten().collect::<Vec<_>>();
 
         out.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -543,7 +541,7 @@ impl TypeImportRegistry {
         }
     }
 
-
+    #[allow(clippy::result_unit_err)]
     pub fn generate_default(&self, _type_path: &str) -> Result<Value, ()> {
 
         todo!()
@@ -819,7 +817,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
         registry.register::<ComponentA>();
         
-        let mut imports = TypeImportRegistry::from_registry(&registry);
+        let imports = TypeImportRegistry::from_registry(&registry);
         
         assert_eq!(
             imports.types.get(ComponentA::type_path()),
@@ -850,7 +848,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
         registry.register::<ComponentA>();
 
-        let mut imports = TypeImportRegistry::from_registry(&registry);
+        let imports = TypeImportRegistry::from_registry(&registry);
 
         assert_eq!(
             imports.types.get(ComponentA::type_path()),
@@ -885,7 +883,7 @@ mod tests {
         let mut registry = TypeRegistry::new();
         registry.register::<EnumComponent>();
 
-        let mut imports = TypeImportRegistry::from_registry(&registry);
+        let imports = TypeImportRegistry::from_registry(&registry);
 
         assert_eq!(
             imports.types.get(EnumComponent::type_path()),
