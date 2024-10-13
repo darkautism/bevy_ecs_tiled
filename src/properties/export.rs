@@ -1,14 +1,15 @@
-use bevy::prelude::*;
-use bevy::utils::hashbrown::HashMap;
-use std::collections::hash_map::Entry;
 use crate::properties::import::{
     Class, Enum, FieldType, Member, StorageType, TypeData, TypeImport, UseAs,
 };
+use bevy::prelude::*;
 use bevy::reflect::{
-    ArrayInfo, EnumInfo, GetTypeRegistration, NamedField, Reflect, StructInfo, TupleInfo, TupleStructInfo,
-    TypeInfo, TypeRegistration, TypeRegistry, UnitVariantInfo, UnnamedField, VariantInfo
+    ArrayInfo, EnumInfo, GetTypeRegistration, NamedField, Reflect, StructInfo, TupleInfo,
+    TupleStructInfo, TypeInfo, TypeRegistration, TypeRegistry, UnitVariantInfo, UnnamedField,
+    VariantInfo,
 };
+use bevy::utils::hashbrown::HashMap;
 use serde_json::Value;
+use std::collections::hash_map::Entry;
 use thiserror::Error;
 use tiled::PropertyValue;
 
@@ -159,12 +160,18 @@ fn dependencies(t: &TypeRegistration) -> Vec<&'static str> {
         TypeInfo::Tuple(info) => info.iter().map(UnnamedField::type_path).collect(),
         TypeInfo::List(info) => vec![info.item_type_path_table().path()],
         TypeInfo::Array(info) => vec![info.item_type_path_table().path()],
-        TypeInfo::Map(info) => vec![info.key_type_path_table().path(), info.value_type_path_table().path()],
-        TypeInfo::Enum(info) => info.iter().flat_map(|s| match s {
-            VariantInfo::Struct(s) => s.iter().map(NamedField::type_path).collect(),
-            VariantInfo::Tuple(s) => s.iter().map(UnnamedField::type_path).collect(),
-            VariantInfo::Unit(_) => vec![],
-        }).collect(),
+        TypeInfo::Map(info) => vec![
+            info.key_type_path_table().path(),
+            info.value_type_path_table().path(),
+        ],
+        TypeInfo::Enum(info) => info
+            .iter()
+            .flat_map(|s| match s {
+                VariantInfo::Struct(s) => s.iter().map(NamedField::type_path).collect(),
+                VariantInfo::Tuple(s) => s.iter().map(UnnamedField::type_path).collect(),
+                VariantInfo::Unit(_) => vec![],
+            })
+            .collect(),
         TypeInfo::Value(_) => vec![],
     }
 }
@@ -179,7 +186,7 @@ impl TypeImportRegistry {
 
         out
     }
-    
+
     pub fn from_registry_2(_registry: &TypeRegistry) -> Self {
         // let out = Self::default();
         // let to_register: Vec<&TypeRegistration> = registry.iter()
@@ -189,13 +196,16 @@ impl TypeImportRegistry {
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn try_register_recursive(&mut self, registry: &TypeRegistry, t: &TypeRegistration) -> Result<HashMap<&'static str, TypeImport>, ()> {
+    pub fn try_register_recursive(
+        &mut self,
+        registry: &TypeRegistry,
+        t: &TypeRegistration,
+    ) -> Result<HashMap<&'static str, TypeImport>, ()> {
         let _t_import = self.generate_import(t, registry).map_err(|_| ())?;
-        
+
         // let mut out = HashMap::from()
-    
+
         todo!()
-    
     }
 
     pub fn register<T: Reflect + GetTypeRegistration>(&mut self, registry: &TypeRegistry) {
@@ -210,7 +220,8 @@ impl TypeImportRegistry {
         match self.generate_import(registration, registry) {
             Ok(import) => {
                 if !import.is_empty() {
-                    self.types.insert(registration.type_info().type_path(), import);
+                    self.types
+                        .insert(registration.type_info().type_path(), import);
                 }
             }
             Err(_) => {
@@ -253,17 +264,18 @@ impl TypeImportRegistry {
         let mut to_remove = vec![type_path.to_string()];
         while let Some(type_path) = to_remove.pop() {
             self.types.retain(|_, import| {
-                import.iter().all(|import| {
-                    match &import.type_data {
-                        TypeData::Enum(_) => true,
-                        TypeData::Class(class) => {
-                            if class.members.iter()
-                                .any(|m| m.property_type.as_ref().is_some_and(|s| s.as_str() == type_path)) {
-                                to_remove.push(import.name.clone());
-                                false
-                            } else {
-                                true
-                            }
+                import.iter().all(|import| match &import.type_data {
+                    TypeData::Enum(_) => true,
+                    TypeData::Class(class) => {
+                        if class.members.iter().any(|m| {
+                            m.property_type
+                                .as_ref()
+                                .is_some_and(|s| s.as_str() == type_path)
+                        }) {
+                            to_remove.push(import.name.clone());
+                            false
+                        } else {
+                            true
                         }
                     }
                 })
@@ -418,23 +430,19 @@ impl TypeImportRegistry {
             // Enum for the enum variant
             // Class's for each non-unit variant
             // Class to hold the variant + each non-unit variant.
-            
+
             // Note: extra `:` is done to not conflict with an enum variant named Variant
             let variants_name = info.type_path().to_string() + ":::Variant";
-            
+
             let mut out = vec![TypeImport {
                 id: self.next_id(),
                 name: variants_name.clone(),
                 type_data: TypeData::Enum(Enum {
                     storage_type: StorageType::String,
                     values_as_flags: false,
-                    values: info.iter()
-                        .map(|s| s.name().to_string())
-                        .collect(),
+                    values: info.iter().map(|s| s.name().to_string()).collect(),
                 }),
             }];
-            
-            
 
             let mut root_members = Vec::with_capacity(2);
             root_members.push(Member {
@@ -443,10 +451,13 @@ impl TypeImportRegistry {
                 name: ":variant".to_string(),
                 property_type: Some(variants_name),
                 type_field: FieldType::Class,
-                value: info.iter().next().map(|s| Value::String(s.name().to_string()))
+                value: info
+                    .iter()
+                    .next()
+                    .map(|s| Value::String(s.name().to_string()))
                     .unwrap_or_default(),
             });
-            
+
             for variant in info.iter() {
                 match variant {
                     VariantInfo::Struct(s) => {
@@ -458,7 +469,8 @@ impl TypeImportRegistry {
                                 use_as: UseAs::all_supported(),
                                 color: "#000000".to_string(),
                                 draw_fill: true,
-                                members: s.iter()
+                                members: s
+                                    .iter()
                                     .map(|s| {
                                         let (type_field, property_type) =
                                             type_to_field(registry.get(s.type_id()).unwrap())?;
@@ -474,14 +486,14 @@ impl TypeImportRegistry {
                             }),
                         };
                         out.push(import);
-                        
+
                         let root_field = Member {
                             name: s.name().to_string(),
                             property_type: Some(name),
                             type_field: FieldType::Class,
                             value: Default::default(),
                         };
-                        
+
                         root_members.push(root_field);
                     }
                     VariantInfo::Tuple(tuple) => {
@@ -493,7 +505,8 @@ impl TypeImportRegistry {
                                 use_as: UseAs::all_supported(),
                                 color: "#000000".to_string(),
                                 draw_fill: true,
-                                members: tuple.iter()
+                                members: tuple
+                                    .iter()
                                     .map(|s| {
                                         let (type_field, property_type) =
                                             type_to_field(registry.get(s.type_id()).unwrap())?;
@@ -509,7 +522,7 @@ impl TypeImportRegistry {
                             }),
                         };
                         out.push(import);
-                        
+
                         let root_field = Member {
                             name: tuple.name().to_string(),
                             property_type: Some(name),
@@ -522,7 +535,7 @@ impl TypeImportRegistry {
                     VariantInfo::Unit(_) => continue,
                 }
             }
-            
+
             let root = TypeImport {
                 id: self.next_id(),
                 name: info.type_path().to_string(),
@@ -533,9 +546,9 @@ impl TypeImportRegistry {
                     members: root_members,
                 }),
             };
-            
+
             out.push(root);
-            
+
             Ok(out)
             // Err(ImportConversionError::UnsupportedValue(info.type_path()))
         }
@@ -543,7 +556,6 @@ impl TypeImportRegistry {
 
     #[allow(clippy::result_unit_err)]
     pub fn generate_default(&self, _type_path: &str) -> Result<Value, ()> {
-
         todo!()
     }
 }
@@ -798,27 +810,25 @@ pub fn unit_import(id: u32, name: String) -> TypeImport {
 
 #[cfg(test)]
 mod tests {
-    use bevy::reflect::{TypeRegistry, Reflect, TypePath};
-    use bevy::ecs::{
-        entity::Entity,
-        component::Component,
-        reflect::ReflectComponent,
-    };
     use crate::prelude::import::TypeData;
     use crate::properties::export::TypeImportRegistry;
-    use crate::properties::import::{Class, Enum, FieldType, Member, StorageType, TypeImport, UseAs};
+    use crate::properties::import::{
+        Class, Enum, FieldType, Member, StorageType, TypeImport, UseAs,
+    };
+    use bevy::ecs::{component::Component, entity::Entity, reflect::ReflectComponent};
+    use bevy::reflect::{Reflect, TypePath, TypeRegistry};
 
     #[test]
     fn generate_with_entity() {
         #[derive(Component, Reflect)]
         #[reflect(Component)]
         struct ComponentA(Entity);
-        
+
         let mut registry = TypeRegistry::new();
         registry.register::<ComponentA>();
-        
+
         let imports = TypeImportRegistry::from_registry(&registry);
-        
+
         assert_eq!(
             imports.types.get(ComponentA::type_path()),
             Some(&vec![TypeImport {
@@ -892,11 +902,7 @@ mod tests {
                 name: EnumComponent::type_path().to_string(),
                 type_data: TypeData::Enum(Enum {
                     storage_type: StorageType::String,
-                    values: vec![
-                        "VarA".to_string(),
-                        "VarB".to_string(),
-                        "VarC".to_string(),
-                    ],
+                    values: vec!["VarA".to_string(), "VarB".to_string(), "VarC".to_string(),],
                     values_as_flags: false,
                 }),
             }])
